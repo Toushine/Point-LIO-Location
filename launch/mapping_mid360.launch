@@ -17,6 +17,7 @@
     <!-- in location_mode can disable imu input -->
     <param name="location_mode" type="bool" value="1" /> 
     <param name="map_path" type="string" value="$(find point_lio)/map/map.pcd" />
+    <param name="initial_z" type="double" value="1.6" /> 
     <param name="mapping/imu_en" type="bool" value="0" />
     </node>
 

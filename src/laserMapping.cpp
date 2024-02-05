@@ -174,28 +174,29 @@ void initialpose_callback(
   init_lock_.lock();
   init_translation_[0] = pose_msg->pose.pose.position.x;
   init_translation_[1] = pose_msg->pose.pose.position.y;
-  //   init_translation_[2] = pose_msg->pose.pose.position.z;
 
   double sum_z = 0.0, delta_x, delta_y, distance;
-   PointType p;
+  PointType p;
   int count = 0;
   for (std::size_t i = 0; i < map_cloud->points.size(); i++) {
     p = map_cloud->points[i];
-    if (p.z > 0)
+    float z_diff = std::fabs(p.z - initial_z_);
+    if (z_diff > 0.5)
       continue;
-    
+
     delta_x = p.x - pose_msg->pose.pose.position.x;
     delta_y = p.y - pose_msg->pose.pose.position.y;
-    distance = sqrt(delta_x * delta_x+ delta_y* delta_y);
-    if (distance < 0.5 ) {
+    distance = sqrt(delta_x * delta_x + delta_y * delta_y);
+    if (distance < 0.4) {
       sum_z += p.z;
       count++;
     }
   }
-  if (count != 0)
+  if (count != 0) {
     init_translation_[2] = sum_z / count;
-  else
-    init_translation_[2] = -0.6;
+  } else {
+    init_translation_[2] = initial_z_;
+  }
 
   init_rotation_ = Eigen::Quaterniond(pose_msg->pose.pose.orientation.w,
                                       pose_msg->pose.pose.orientation.x,

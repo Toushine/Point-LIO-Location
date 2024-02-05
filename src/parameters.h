@@ -80,6 +80,8 @@ extern ofstream fout_out, fout_imu_pbp, fout_rtk;
 
 extern bool flg_islocation_mode_;
 extern std::string map_path_;
+extern double initial_z_;
+
 void readParameters(ros::NodeHandle &n);
 void open_file();
 Eigen::Matrix<double, 3, 1> SO3ToEuler(const SO3 &orient);

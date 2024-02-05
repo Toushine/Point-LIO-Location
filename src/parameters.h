@@ -9,6 +9,7 @@
 #include "IMU_Processing.h"
 #include <sensor_msgs/NavSatFix.h>
 #include <livox_ros_driver/CustomMsg.h>
+#include <livox_ros_driver2/CustomMsg.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <mutex>
 #include <omp.h>
@@ -76,6 +77,9 @@ extern double time_update_last, time_current, time_predict_last_const, t_last;
 extern MeasureGroup Measures;
 
 extern ofstream fout_out, fout_imu_pbp, fout_rtk;
+
+extern bool flg_islocation_mode_;
+extern std::string map_path_;
 void readParameters(ros::NodeHandle &n);
 void open_file();
 Eigen::Matrix<double, 3, 1> SO3ToEuler(const SO3 &orient);

@@ -1,6 +1,12 @@
 // #include <so3_math.h>
+#include <cstddef>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <pcl/common/transforms.h>
+#include <pcl/registration/icp.h>
+#include <pcl/registration/ndt.h>
+#include <unistd.h>
 #include <visualization_msgs/Marker.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
@@ -9,7 +15,9 @@
 #include <pcl/io/pcd_io.h>
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
+#include "common_lib.h"
 #include "li_initialization.h"
+#include "parameters.h"
 #include <malloc.h>
 // #include <cv_bridge/cv_bridge.h>
 // #include "matplotlibcpp.h"
@@ -27,6 +35,14 @@ int time_log_counter = 0; //, publish_count = 0;
 
 bool init_map = false, flg_first_scan = true;
 
+// for location mode 
+bool flg_location_inited_ = false;
+bool flg_get_init_guess_ = false;
+Eigen::Vector3d init_translation_= Eigen::Vector3d::Zero();
+Eigen::Quaterniond init_rotation_=Eigen::Quaterniond::Identity();
+std::mutex init_lock_;
+PointCloudXYZI::Ptr map_cloud(new PointCloudXYZI());
+
 // Time Log Variables
 double match_time = 0, solve_time = 0, propag_time = 0, update_time = 0;
 
@@ -36,6 +52,7 @@ bool  flg_reset = false, flg_exit = false;
 PointCloudXYZI::Ptr feats_undistort(new PointCloudXYZI());
 PointCloudXYZI::Ptr feats_down_body_space(new PointCloudXYZI());
 PointCloudXYZI::Ptr init_feats_world(new PointCloudXYZI());
+PointCloudXYZI::Ptr init_total_world(new PointCloudXYZI());
 std::deque<PointCloudXYZI::Ptr> depth_feats_world;
 pcl::VoxelGrid<PointType> downSizeFilterSurf;
 pcl::VoxelGrid<PointType> downSizeFilterMap;
@@ -149,6 +166,146 @@ void MapIncremental() {
     ivox_->AddPoints(points_to_add);
 }
 
+void initialpose_callback(
+    const geometry_msgs::PoseWithCovarianceStampedConstPtr &pose_msg) {
+  if (flg_location_inited_)
+    return;
+
+  init_lock_.lock();
+  init_translation_[0] = pose_msg->pose.pose.position.x;
+  init_translation_[1] = pose_msg->pose.pose.position.y;
+  //   init_translation_[2] = pose_msg->pose.pose.position.z;
+
+  double sum_z = 0.0, delta_x, delta_y, distance;
+   PointType p;
+  int count = 0;
+  for (std::size_t i = 0; i < map_cloud->points.size(); i++) {
+    p = map_cloud->points[i];
+    if (p.z > 0)
+      continue;
+    
+    delta_x = p.x - pose_msg->pose.pose.position.x;
+    delta_y = p.y - pose_msg->pose.pose.position.y;
+    distance = sqrt(delta_x * delta_x+ delta_y* delta_y);
+    if (distance < 0.5 ) {
+      sum_z += p.z;
+      count++;
+    }
+  }
+  if (count != 0)
+    init_translation_[2] = sum_z / count;
+  else
+    init_translation_[2] = -0.6;
+
+  init_rotation_ = Eigen::Quaterniond(pose_msg->pose.pose.orientation.w,
+                                      pose_msg->pose.pose.orientation.x,
+                                      pose_msg->pose.pose.orientation.y,
+                                      pose_msg->pose.pose.orientation.z);
+  
+  init_lock_.unlock();
+
+  flg_get_init_guess_ = true;
+  ROS_INFO("Init translation: %f %f %f", init_translation_(0),
+           init_translation_(1), init_translation_(2));
+  ROS_INFO("Init quaternion: %f %f %f %f.", init_rotation_.w(),
+           init_rotation_.x(), init_rotation_.y(), init_rotation_.z());
+}
+
+void initial_pose() {
+    Eigen::Affine3d init_guess;
+    if (flg_get_init_guess_) {
+      Eigen::Matrix4d init_guess_matrix = Eigen::Matrix4d::Identity();
+      init_guess_matrix.block<3, 3>(0, 0) = init_rotation_.toRotationMatrix();
+      init_guess_matrix.block<3, 1>(0, 3) = init_translation_;
+      init_lock_.lock();
+      init_guess.matrix() = init_guess_matrix;
+      init_lock_.unlock();
+    } else {
+      return;
+    }
+
+    // from coarse(ndt) to fine(icp) 
+    pcl::NormalDistributionsTransform<PointType, PointType> ndt;
+    ndt.setTransformationEpsilon(1e-4);
+    ndt.setEuclideanFitnessEpsilon(1e-4);
+    ndt.setMaximumIterations(40);
+    ndt.setResolution(1.0);
+    ndt.setInputSource(init_total_world);
+    ndt.setInputTarget(map_cloud);
+
+    pcl::IterativeClosestPoint<PointType, PointType> icp;
+    icp.setMaxCorrespondenceDistance(40);
+    icp.setMaximumIterations(100);
+    icp.setTransformationEpsilon(1e-6);
+    icp.setEuclideanFitnessEpsilon(1e-6);
+    // icp.setRANSACIterations(0);
+    icp.setInputSource(init_total_world);
+    icp.setInputTarget(map_cloud);
+
+    pcl::PointCloud<PointType>::Ptr unused_result(new pcl::PointCloud<PointType>());
+    ndt.align(*unused_result, init_guess.matrix().cast<float>());
+    if (ndt.hasConverged()) {
+        icp.align(*unused_result, ndt.getFinalTransformation());
+    } else {
+      ROS_WARN("NDT has not converged!Please try again!");
+      return;
+    }
+
+    double score=icp.getFitnessScore();
+    if (icp.hasConverged() == false || score==0.0 || score > 0.2)
+    {
+        ROS_ERROR("Global Initializing Fail with %f!",score);
+        flg_location_inited_ = false;
+        if(flg_get_init_guess_){
+            flg_get_init_guess_ = false;
+        }
+        return;
+    } else{
+        init_guess = icp.getFinalTransformation().cast<double>();
+      
+        Eigen::Vector3d final_position = init_guess.translation();
+        Eigen::Quaterniond final_rotation(init_guess.rotation());
+
+        ROS_INFO("\033[1;35m Initializing Succeed with %f score! \033[0m",
+                 score);
+        ROS_INFO(
+            "\033[1;35m Initializing Position: %f %f %f,%f %f %f %f.\033[0m",
+            final_position(0), final_position(1), final_position(2),
+            final_rotation.w(), final_rotation.x(), final_rotation.y(),
+            final_rotation.z());
+
+        flg_location_inited_=true;
+
+        if (!use_imu_as_input) {
+          Eigen::Matrix<double, 30, 30>
+              P_init_output; // = MD(24, 24)::Identity() * 0.01;
+          reset_cov_output(P_init_output);
+
+          state_out = state_output();
+          state_out.pos = final_position;
+          state_out.rot = final_rotation.toRotationMatrix();
+
+          kf_output.change_P(P_init_output);
+          kf_output.x_.pos = final_position;
+          kf_output.x_.rot = final_rotation.toRotationMatrix();
+        } else {
+          Eigen::Matrix<double, 24, 24>
+              P_init; // = MD(24, 24)::Identity() * 0.01;
+          reset_cov(P_init);
+
+          state_in = state_input();
+          state_in.pos = final_position;
+          state_in.rot = final_rotation.toRotationMatrix();
+
+          kf_input.change_P(P_init);
+          kf_input.x_.pos = final_position;
+          kf_input.x_.rot = final_rotation.toRotationMatrix();
+        }
+    }
+}
+
+
+
 void publish_init_map(const ros::Publisher & pubLaserCloudFullRes)
 {
     int size_init_map = init_feats_world->size();
@@ -216,7 +373,7 @@ void publish_frame_world(const ros::Publisher & pubLaserCloudFullRes)
             pcl::PCDWriter pcd_writer;
             cout << "current scan saved to /PCD/" << all_points_dir << endl;
             pcd_writer.writeBinary(all_points_dir, *pcl_wait_save);
-            pcl_wait_save->clear();
+            // pcl_wait_save->clear();
             scan_wait_num = 0;
         }
     }
@@ -371,10 +528,15 @@ int main(int argc, char** argv)
     open_file();
 
     /*** ROS subscribe initialization ***/
-    ros::Subscriber sub_pcl = p_pre->lidar_type == AVIA ? \
-        nh.subscribe(lid_topic, 200000, livox_pcl_cbk) : \
+    ros::Subscriber sub_pcl = (p_pre->lidar_type == MID360) ? \
+        nh.subscribe(lid_topic, 200000, livox2_pcl_cbk) : \
         nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
     ros::Subscriber sub_imu = nh.subscribe(imu_topic, 200000, imu_cbk);
+
+    ros::Subscriber sub_init_pose;
+    if(flg_islocation_mode_){
+      sub_init_pose = nh.subscribe("/initialpose", 1, initialpose_callback);
+    }
 
     ros::Publisher pubLaserCloudFullRes = nh.advertise<sensor_msgs::PointCloud2>
             ("/cloud_registered", 1000);
@@ -383,13 +545,30 @@ int main(int argc, char** argv)
     ros::Publisher pubLaserCloudEffect  = nh.advertise<sensor_msgs::PointCloud2>
             ("/cloud_effected", 1000);
     ros::Publisher pubLaserCloudMap = nh.advertise<sensor_msgs::PointCloud2>
-            ("/Laser_map", 1000);
+            ("/global_map", 1000);
     ros::Publisher pubOdomAftMapped = nh.advertise<nav_msgs::Odometry> 
             ("/aft_mapped_to_init", 1000);
     ros::Publisher pubPath          = nh.advertise<nav_msgs::Path> 
             ("/path", 1000);
-    ros::Publisher plane_pub = nh.advertise<visualization_msgs::Marker>
-            ("/planner_normal", 1000);
+    ros::Publisher plane_pub =
+        nh.advertise<visualization_msgs::Marker>("/planner_normal", 1000);
+
+    if(flg_islocation_mode_)
+    {
+      pcl::io::loadPCDFile(map_path_, *map_cloud);
+      ROS_INFO("Load map cloud with size: %zu.", map_cloud->points.size());
+
+      sensor_msgs::PointCloud2 laserCloudmsg;
+      pcl::toROSMsg(*map_cloud, laserCloudmsg);
+
+      laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time);
+      laserCloudmsg.header.frame_id = "camera_init";
+      usleep(1000000);
+      for (int i = 0; i < 5; i++) {
+        pubLaserCloudMap.publish(laserCloudmsg);
+        usleep(100000);
+      }
+    }
 //------------------------------------------------------------------------------------------------------
     signal(SIGINT, SigHandle);
     ros::Rate loop_rate(500);
@@ -400,6 +579,22 @@ int main(int argc, char** argv)
         ros::spinOnce();
         if(sync_packages(Measures)) 
         {
+          if (flg_islocation_mode_ && !flg_location_inited_) {
+            PointCloudXYZI::Ptr init_world(new PointCloudXYZI());
+            init_world->resize(Measures.lidar->points.size());
+            for (int i = 0; i < Measures.lidar->points.size(); i++) {
+              pointBodyToWorld(&(Measures.lidar->points[i]),
+                               &(init_world->points[i]));
+            }
+            *init_total_world += *init_world;
+
+            if (init_total_world->points.size() > 10000) {
+              initial_pose();
+            } else {
+              continue;
+            }
+          }
+
             if (flg_reset)
             {
                 ROS_WARN("reset when rosbag play back");
@@ -509,9 +704,12 @@ int main(int argc, char** argv)
                     }
                     // V3D tmp_gravity << VEC_FROM_ARRAY(gravity_init);
                     M3D rot_init;
-                    p_imu->Set_init(tmp_gravity, rot_init);  
-                    kf_input.x_.rot = rot_init;
-                    kf_output.x_.rot = rot_init;
+                    p_imu->Set_init(tmp_gravity, rot_init);
+
+                    if (!flg_islocation_mode_) {
+                      kf_input.x_.rot = rot_init;
+                      kf_output.x_.rot = rot_init;
+                    }
                     // kf_input.x_.rot; //.normalize();
                     // kf_output.x_.rot; //.normalize();
                     kf_output.x_.acc = - rot_init.transpose() * kf_output.x_.gravity;
@@ -520,30 +718,36 @@ int main(int argc, char** argv)
                 continue;}
             }
             /*** initialize the map ***/
-            if(!init_map)
-            {
+            if (!init_map) {
+              if (flg_islocation_mode_) {
+                init_feats_world->reserve(map_cloud->size());
+                *init_feats_world = *map_cloud;
+              } else {
                 feats_down_world->resize(feats_undistort->size());
-                for(int i = 0; i < feats_undistort->size(); i++)
-                {
-                    {
-                        pointBodyToWorld(&(feats_undistort->points[i]), &(feats_down_world->points[i]));
-                    }
+                for (int i = 0; i < feats_undistort->size(); i++) {
+                  {
+                    pointBodyToWorld(&(feats_undistort->points[i]),
+                                     &(feats_down_world->points[i]));
+                  }
                 }
-                for (size_t i = 0; i < feats_down_world->size(); i++) 
-                {
-                    init_feats_world->points.emplace_back(feats_down_world->points[i]);
+                for (size_t i = 0; i < feats_down_world->size(); i++) {
+                  init_feats_world->points.emplace_back(
+                      feats_down_world->points[i]);
                 }
-                if(init_feats_world->size() < init_map_size) 
-                {init_map = false;}
-                else
-                {   
-                    ivox_->AddPoints(init_feats_world->points);
-                    publish_init_map(pubLaserCloudMap); //(pubLaserCloudFullRes);
-                    
-                    init_feats_world.reset(new PointCloudXYZI());
-                    init_map = true;
+              }
+
+              if (init_feats_world->size() < init_map_size) {
+                init_map = false;
+              } else {
+                ivox_->AddPoints(init_feats_world->points);
+                if (!flg_islocation_mode_) {
+                  publish_init_map(pubLaserCloudMap); //(pubLaserCloudFullRes);
                 }
-                continue;
+
+                init_feats_world.reset(new PointCloudXYZI());
+                init_map = true;
+              }
+              continue;
             }
 
             /*** ICP and Kalman filter update ***/

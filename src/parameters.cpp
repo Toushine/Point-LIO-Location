@@ -44,6 +44,9 @@ MeasureGroup Measures;
 
 ofstream fout_out, fout_imu_pbp, fout_rtk;
 
+bool flg_islocation_mode_ = false;
+std::string map_path_ = "";
+
 void readParameters(ros::NodeHandle &nh)
 {
   p_pre.reset(new Preprocess());
@@ -100,7 +103,8 @@ void readParameters(ros::NodeHandle &nh)
   nh.param<bool>("runtime_pos_log_enable", runtime_pos_log, 0);
   nh.param<bool>("pcd_save/pcd_save_en", pcd_save_en, false);
   nh.param<int>("pcd_save/interval", pcd_save_interval, -1);
-
+  nh.param<bool>("location_mode", flg_islocation_mode_, false);
+  nh.param<std::string>("map_path",map_path_,"");
   nh.param<double>("mapping/lidar_time_inte",lidar_time_inte,0.1);
   nh.param<double>("mapping/lidar_meas_cov",laser_point_cov,0.1);
 

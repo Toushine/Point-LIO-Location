@@ -28,8 +28,9 @@ extern double T1[MAXN], s_plot[MAXN], s_plot2[MAXN], s_plot3[MAXN], s_plot11[MAX
 
 // extern sensor_msgs::Imu::ConstPtr imu_last_ptr;
 
-void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg); 
-void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg); 
+void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg);
+void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg);
+void livox2_pcl_cbk(const livox_ros_driver2::CustomMsg::ConstPtr &msg);
 void imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in); 
 bool sync_packages(MeasureGroup &meas);
 

@@ -1,4 +1,6 @@
 #include "preprocess.h"
+#include "IMU_Processing.h"
+#include "livox_ros_driver2/CustomMsg.h"
 
 #define RETURN0     0x00
 #define RETURN0AND1 0x10
@@ -50,6 +52,13 @@ void Preprocess::process(const livox_ros_driver::CustomMsg::ConstPtr &msg, Point
   *pcl_out = pl_surf;
 }
 
+void Preprocess::process(const livox_ros_driver2::CustomMsg::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out)
+{  
+  mid360_handler(msg);
+  *pcl_out = pl_surf;
+}
+
+
 void Preprocess::process(const sensor_msgs::PointCloud2::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out)
 {
   switch (time_unit)
@@ -94,6 +103,70 @@ void Preprocess::process(const sensor_msgs::PointCloud2::ConstPtr &msg, PointClo
 
 
 void Preprocess::process_cut_frame_livox(const livox_ros_driver::CustomMsg::ConstPtr &msg,
+                                         deque<PointCloudXYZI::Ptr> &pcl_out, deque<double> &time_lidar,
+                                         const int required_frame_num, int scan_count) {
+    int plsize = msg->point_num;
+    pl_surf.clear();
+    pl_surf.reserve(plsize);
+    pl_full.clear();
+    pl_full.resize(plsize);
+    int valid_point_num = 0;
+
+    for (uint i = 1; i < plsize; i++) {
+        if ((msg->points[i].line < N_SCANS) &&
+        ((msg->points[i].tag & 0x30) == 0x10 || (msg->points[i].tag & 0x30) == 0x00))
+        {
+            valid_point_num++;
+            if (valid_point_num % point_filter_num == 0) {
+                pl_full[i].x = msg->points[i].x;
+                pl_full[i].y = msg->points[i].y;
+                pl_full[i].z = msg->points[i].z;
+                pl_full[i].intensity = msg->points[i].reflectivity;
+                //use curvature as time of each laser points，unit: ms
+                pl_full[i].curvature = msg->points[i].offset_time / float(1000000);
+
+                double dist = pl_full[i].x * pl_full[i].x + pl_full[i].y * pl_full[i].y + pl_full[i].z * pl_full[i].z;
+                if (dist < blind * blind) continue;
+
+                if ((abs(pl_full[i].x - pl_full[i - 1].x) > 1e-7)
+                    || (abs(pl_full[i].y - pl_full[i - 1].y) > 1e-7)
+                    || (abs(pl_full[i].z - pl_full[i - 1].z) > 1e-7)) {
+                    pl_surf.push_back(pl_full[i]);
+                }
+            }
+        }
+    }
+    sort(pl_surf.points.begin(), pl_surf.points.end(), time_list_cut_frame);
+    //end time of last frame，单位ms
+    double last_frame_end_time = msg->header.stamp.toSec() * 1000;
+    uint valid_num = 0;
+    uint cut_num = 0;
+    uint valid_pcl_size = pl_surf.points.size();
+
+    int required_cut_num = required_frame_num;
+    if (scan_count < 5)
+        required_cut_num = 1;
+
+    PointCloudXYZI pcl_cut;
+    for (uint i = 1; i < valid_pcl_size; i++) {
+        valid_num++;
+        //Compute new opffset time of each point：ms
+        pl_surf[i].curvature += msg->header.stamp.toSec() * 1000 - last_frame_end_time;
+        pcl_cut.push_back(pl_surf[i]);
+        if (valid_num == (int((cut_num + 1) * valid_pcl_size / required_cut_num) - 1)) {
+            cut_num++;
+            time_lidar.push_back(last_frame_end_time);
+            PointCloudXYZI::Ptr pcl_temp(new PointCloudXYZI()); //Initialize shared_ptr
+            *pcl_temp = pcl_cut;
+            pcl_out.push_back(pcl_temp);
+            //Update frame head
+            last_frame_end_time += pl_surf[i].curvature;
+            pcl_cut.clear();
+            pcl_cut.reserve(valid_pcl_size * 2 / required_frame_num);
+        }
+    }
+}
+void Preprocess::process_cut_frame_livox2(const livox_ros_driver2::CustomMsg::ConstPtr &msg,
                                          deque<PointCloudXYZI::Ptr> &pcl_out, deque<double> &time_lidar,
                                          const int required_frame_num, int scan_count) {
     int plsize = msg->point_num;
@@ -357,7 +430,51 @@ void Preprocess::avia_handler(const livox_ros_driver::CustomMsg::ConstPtr &msg)
       }
     }
   }
+}
 
+void Preprocess::mid360_handler(
+    const livox_ros_driver2::CustomMsg::ConstPtr &msg) {
+  pl_surf.clear();
+  pl_corn.clear();
+  pl_full.clear();
+  // double t1 = omp_get_wtime();
+  int plsize = msg->point_num;
+
+  pl_corn.reserve(plsize);
+  pl_surf.reserve(plsize);
+  pl_full.resize(plsize);
+
+  for(int i=0; i<N_SCANS; i++)
+  {
+    pl_buff[i].clear();
+    pl_buff[i].reserve(plsize);
+  }
+  uint valid_num = 0;
+  
+  
+  for(uint i=1; i<plsize; i++)
+  {
+    if((msg->points[i].line < N_SCANS) && ((msg->points[i].tag & 0x30) == 0x10 || (msg->points[i].tag & 0x30) == 0x00))
+    {
+      valid_num ++;
+      if (valid_num % point_filter_num == 0)
+      {
+        pl_full[i].x = msg->points[i].x;
+        pl_full[i].y = msg->points[i].y;
+        pl_full[i].z = msg->points[i].z;
+        pl_full[i].intensity = msg->points[i].reflectivity;
+        pl_full[i].curvature = msg->points[i].offset_time / float(1000000); // use curvature as time of each laser points, curvature unit: ms
+
+        if(((abs(pl_full[i].x - pl_full[i-1].x) > 1e-7) 
+            || (abs(pl_full[i].y - pl_full[i-1].y) > 1e-7)
+            || (abs(pl_full[i].z - pl_full[i-1].z) > 1e-7))
+            && (pl_full[i].x * pl_full[i].x + pl_full[i].y * pl_full[i].y + pl_full[i].z * pl_full[i].z > (blind * blind)))
+        {
+          pl_surf.push_back(pl_full[i]);
+        }
+      }
+    }
+  }
 }
 
 void Preprocess::oust64_handler(const sensor_msgs::PointCloud2::ConstPtr &msg)

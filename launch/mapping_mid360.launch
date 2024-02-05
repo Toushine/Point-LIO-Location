@@ -1,8 +1,6 @@
 <launch>
   <!-- Launch file for Livox Mid-360 LiDAR -->
   
-    <arg name="rviz" default="true" />
-
     <node pkg="point_lio" type="pointlio_mapping" name="laserMapping" output="screen">
     <rosparam command="load" file="$(find point_lio)/config/mid360.yaml" />
     <param name="use_imu_as_input" type="bool" value="1"/> <!--change to 1 to use IMU as input of Point-LIO-->
@@ -15,8 +13,11 @@
     <param name="filter_size_map" type="double" value="0.2" /> <!--0.5, 0.3, 0.15, 0.1-->
     <param name="ivox_nearby_type" type="int" value="6" /> <!--0.5, 0.3, 0.15, 0.1-->
     <param name="runtime_pos_log_enable" type="bool" value="0" /> <!--1-->
+    
+    <!-- in location_mode can disable imu input -->
     <param name="location_mode" type="bool" value="1" /> 
     <param name="map_path" type="string" value="$(find point_lio)/map/map.pcd" />
+    <param name="mapping/imu_en" type="bool" value="0" />
     </node>
 
     <node pkg="rviz" type="rviz" name="rviz" args="-d $(find point_lio)/rviz_cfg/loam_livox.rviz" />

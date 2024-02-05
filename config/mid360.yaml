@@ -14,7 +14,6 @@ preprocess:
     blind: 1.0 
 
 mapping:
-    imu_en: true
     extrinsic_est_en: false # for aggressive motion, set this variable false
     imu_time_inte: 0.1 # = 1 / frequency of IMU
     lidar_time_inte: 0.1

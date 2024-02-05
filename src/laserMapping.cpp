@@ -1212,10 +1212,9 @@ int main(int argc, char** argv)
 
             /*** add the feature points to map ***/
             t3 = omp_get_wtime();
-            
-            if(feats_down_size > 4)
-            {
-                MapIncremental();
+
+            if (!flg_islocation_mode_ && feats_down_size > 4) {
+              MapIncremental();
             }
 
             t5 = omp_get_wtime();

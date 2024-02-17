@@ -587,11 +587,14 @@ int main(int argc, char** argv)
               pointBodyToWorld(&(Measures.lidar->points[i]),
                                &(init_world->points[i]));
             }
-            *init_total_world += *init_world;
-
-            if (init_total_world->points.size() > 10000) {
+            
+            if (init_total_world->points.size() > 30000) {
               initial_pose();
+              if (!flg_location_inited_) {
+                continue;
+              }
             } else {
+              *init_total_world += *init_world;
               continue;
             }
           }

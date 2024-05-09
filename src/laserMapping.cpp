@@ -513,10 +513,14 @@ int main(int argc, char **argv) {
   open_file();
 
   /*** ROS subscribe initialization ***/
-  ros::Subscriber sub_pcl =
-      (p_pre->lidar_type == MID360)
-          ? nh.subscribe(lid_topic, 200000, livox2_pcl_cbk)
-          : nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
+  ros::Subscriber sub_pcl;
+  if (p_pre->lidar_type == MID360) {
+    sub_pcl = nh.subscribe(lid_topic, 200000, livox2_pcl_cbk);
+  } else if (p_pre->lidar_type == AVIA) {
+    sub_pcl = nh.subscribe(lid_topic, 200000, livox_pcl_cbk);
+  } else {
+    sub_pcl = nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
+  }
   ros::Subscriber sub_imu = nh.subscribe(imu_topic, 200000, imu_cbk);
 
   ros::Subscriber sub_init_pose;
@@ -569,7 +573,7 @@ int main(int argc, char **argv) {
                            &(init_world->points[i]));
         }
 
-        if (init_total_world->points.size() > 30000) {
+        if (init_total_world->points.size() > 10000) {
           initial_pose();
           if (!flg_location_inited_) {
             continue;
@@ -631,13 +635,15 @@ int main(int argc, char **argv) {
             }
           }
         } else {
-          kf_input.x_.gravity << VEC_FROM_ARRAY(gravity_init);
-          kf_output.x_.gravity << VEC_FROM_ARRAY(gravity_init);
-          kf_output.x_.acc << VEC_FROM_ARRAY(gravity_init);
+          kf_input.x_.gravity << VEC_FROM_ARRAY(gravity);
+          kf_output.x_.gravity << VEC_FROM_ARRAY(gravity);
+          kf_output.x_.acc << VEC_FROM_ARRAY(gravity);
           kf_output.x_.acc *= -1;
           p_imu->imu_need_init_ = false;
           // p_imu->after_imu_init_ = true;
         }
+        G_m_s2 = std::sqrt(gravity[0] * gravity[0] + gravity[1] * gravity[1] +
+                           gravity[2] * gravity[2]);
       }
 
       double t0, t1, t2, t3, t4, t5, match_start, solve_start;
@@ -669,7 +675,7 @@ int main(int argc, char **argv) {
         if (!p_imu->imu_need_init_) {
           V3D tmp_gravity;
           if (imu_en) {
-            tmp_gravity = -p_imu->mean_acc / acc_norm * G_m_s2;
+            tmp_gravity = -p_imu->mean_acc / p_imu->mean_acc.norm() * G_m_s2;
           } else {
             tmp_gravity << VEC_FROM_ARRAY(gravity_init);
             p_imu->after_imu_init_ = true;
@@ -963,7 +969,7 @@ int main(int argc, char **argv) {
                 acc_avr << imu_next.linear_acceleration.x,
                     imu_next.linear_acceleration.y,
                     imu_next.linear_acceleration.z;
-                acc_avr_norm = acc_avr * G_m_s2 / acc_norm;
+                // acc_avr_norm = acc_avr * G_m_s2 / acc_norm;
                 kf_output.update_iterated_dyn_share_IMU();
                 imu_deque.pop_front();
                 if (imu_deque.empty()) break;

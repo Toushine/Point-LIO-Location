@@ -18,6 +18,7 @@
 
 #include <cstddef>
 
+#include "Estimator.h"
 #include "common_lib.h"
 #include "li_initialization.h"
 #include "parameters.h"
@@ -423,6 +424,27 @@ void publish_odometry(const ros::Publisher &pubOdomAftMapped) {
     odomAftMapped.header.stamp = ros::Time().fromSec(lidar_end_time);
   }
   set_posestamp(odomAftMapped.pose.pose);
+
+  // add velocity information
+  if (!use_imu_as_input) {
+    odomAftMapped.twist.twist.linear.x = kf_output.x_.vel(0);
+    odomAftMapped.twist.twist.linear.y = kf_output.x_.vel(1);
+    odomAftMapped.twist.twist.linear.z = kf_output.x_.vel(2);
+
+    odomAftMapped.twist.twist.angular.x = kf_output.x_.omg(0);
+    odomAftMapped.twist.twist.angular.y = kf_output.x_.omg(1);
+    odomAftMapped.twist.twist.angular.z = kf_output.x_.omg(2);
+  } else {
+    odomAftMapped.twist.twist.linear.x = kf_input.x_.vel(0);
+    odomAftMapped.twist.twist.linear.y = kf_input.x_.vel(1);
+    odomAftMapped.twist.twist.linear.z = kf_input.x_.vel(2);
+
+    Eigen::Vector3d gyro_world =
+        Eigen::Quaterniond(kf_input.x_.rot).toRotationMatrix() * input_in.gyro;
+    odomAftMapped.twist.twist.angular.x = gyro_world(0);
+    odomAftMapped.twist.twist.angular.y = gyro_world(1);
+    odomAftMapped.twist.twist.angular.z = gyro_world(2);
+  }
 
   pubOdomAftMapped.publish(odomAftMapped);
 

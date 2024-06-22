@@ -537,32 +537,36 @@ int main(int argc, char **argv) {
   /*** ROS subscribe initialization ***/
   ros::Subscriber sub_pcl;
   if (p_pre->lidar_type == MID360) {
-    sub_pcl = nh.subscribe(lid_topic, 200000, livox2_pcl_cbk);
+    sub_pcl =
+        nh.subscribe(nh.getNamespace() + lid_topic, 200000, livox2_pcl_cbk);
   } else if (p_pre->lidar_type == AVIA) {
-    sub_pcl = nh.subscribe(lid_topic, 200000, livox_pcl_cbk);
+    sub_pcl =
+        nh.subscribe(nh.getNamespace() + lid_topic, 200000, livox_pcl_cbk);
   } else {
-    sub_pcl = nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
+    sub_pcl =
+        nh.subscribe(nh.getNamespace() + lid_topic, 200000, standard_pcl_cbk);
   }
-  ros::Subscriber sub_imu = nh.subscribe(imu_topic, 200000, imu_cbk);
+  ros::Subscriber sub_imu =
+      nh.subscribe(nh.getNamespace() + imu_topic, 200000, imu_cbk);
 
   ros::Subscriber sub_init_pose;
   if (flg_islocation_mode_) {
-    sub_init_pose = nh.subscribe("/initialpose", 1, initialpose_callback);
+    sub_init_pose = nh.subscribe("initialpose", 1, initialpose_callback);
   }
 
   ros::Publisher pubLaserCloudFullRes =
-      nh.advertise<sensor_msgs::PointCloud2>("/cloud_registered", 1000);
+      nh.advertise<sensor_msgs::PointCloud2>("cloud_registered", 1000);
   ros::Publisher pubLaserCloudFullRes_body =
-      nh.advertise<sensor_msgs::PointCloud2>("/cloud_registered_body", 1000);
+      nh.advertise<sensor_msgs::PointCloud2>("cloud_registered_body", 1000);
   ros::Publisher pubLaserCloudEffect =
-      nh.advertise<sensor_msgs::PointCloud2>("/cloud_effected", 1000);
+      nh.advertise<sensor_msgs::PointCloud2>("cloud_effected", 1000);
   ros::Publisher pubLaserCloudMap =
-      nh.advertise<sensor_msgs::PointCloud2>("/global_map", 1000);
+      nh.advertise<sensor_msgs::PointCloud2>("global_map", 1000);
   ros::Publisher pubOdomAftMapped =
-      nh.advertise<nav_msgs::Odometry>("/aft_mapped_to_init", 1000);
-  ros::Publisher pubPath = nh.advertise<nav_msgs::Path>("/path", 1000);
+      nh.advertise<nav_msgs::Odometry>("aft_mapped_to_init", 1000);
+  ros::Publisher pubPath = nh.advertise<nav_msgs::Path>("path", 1000);
   ros::Publisher plane_pub =
-      nh.advertise<visualization_msgs::Marker>("/planner_normal", 1000);
+      nh.advertise<visualization_msgs::Marker>("planner_normal", 1000);
 
   if (flg_islocation_mode_) {
     pcl::io::loadPCDFile(map_path_, *map_cloud);

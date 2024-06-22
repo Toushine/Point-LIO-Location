@@ -537,17 +537,13 @@ int main(int argc, char **argv) {
   /*** ROS subscribe initialization ***/
   ros::Subscriber sub_pcl;
   if (p_pre->lidar_type == MID360) {
-    sub_pcl =
-        nh.subscribe(nh.getNamespace() + lid_topic, 200000, livox2_pcl_cbk);
+    sub_pcl = nh.subscribe(lid_topic, 200000, livox2_pcl_cbk);
   } else if (p_pre->lidar_type == AVIA) {
-    sub_pcl =
-        nh.subscribe(nh.getNamespace() + lid_topic, 200000, livox_pcl_cbk);
+    sub_pcl = nh.subscribe(lid_topic, 200000, livox_pcl_cbk);
   } else {
-    sub_pcl =
-        nh.subscribe(nh.getNamespace() + lid_topic, 200000, standard_pcl_cbk);
+    sub_pcl = nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
   }
-  ros::Subscriber sub_imu =
-      nh.subscribe(nh.getNamespace() + imu_topic, 200000, imu_cbk);
+  ros::Subscriber sub_imu = nh.subscribe(imu_topic, 200000, imu_cbk);
 
   ros::Subscriber sub_init_pose;
   if (flg_islocation_mode_) {

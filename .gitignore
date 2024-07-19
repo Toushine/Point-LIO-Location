@@ -1,0 +1,56 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Python
+__pycache__/
+*.egg-info/
+.cache
+*.pyc
+
+# Project-related
+/.vscode/
+/.ruff_cache/
+/.cache/
+/build/
+/devel/
+/install/
+/dist/
+/log/
+/map/
+/devops/log/
+CATKIN_IGNORE
+.CATKIN_IGNORE
+.DS_Store
+!conf.d
+
+*.deb

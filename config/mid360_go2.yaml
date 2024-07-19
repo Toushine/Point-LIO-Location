@@ -1,7 +1,7 @@
 common:
     lid_topic:  "/livox/lidar_up"
     imu_topic:  "/go2/imu"
-    con_frame: true # true: if you need to combine several LiDAR frames into one
+    con_frame: false # true: if you need to combine several LiDAR frames into one
     con_frame_num: 10 # the number of frames combined
     cut_frame: false # true: if you need to cut one LiDAR frame into several subframes
     cut_frame_time_interval: 0.1 # should be integral fraction of 1 / LiDAR frequency
@@ -35,15 +35,15 @@ mapping:
     gravity: [0.0, 0.0, -9.810] # [0.0, 9.810, 0.0] # # [0.0, 0.0, -9.787561] # gvins #
     gravity_init: [0.0, 0.0, -9.810] # preknown gravity for unstationary start
 
-    extrinsic_T: [ 0.381, 0.000, 0.016]   # aliengo_imu to livox_up, new chassie
-    extrinsic_R: [ 0.0, -0.4694716,  0.8829476,
-                   1, 0.0, 0.0,
-                   0.0, 0.8829476,  0.4694716  ]
+    # extrinsic_T: [ 0.381, 0.000, 0.016]   # aliengo_imu to livox_up, new chassie
+    # extrinsic_R: [ 0.0, -0.4694716,  0.8829476,
+    #                1, 0.0, 0.0,
+    #                0.0, 0.8829476,  0.4694716  ]
 
-    # extrinsic_T: [ 0.367, 0.000, -0.094 ]  # aliengo_imu to livox_down, new chassie
-    # extrinsic_R: [ 0.0000000,  0.6427876,  0.7660444,
-    #                1.0000000,  0.0000000, -0.0000000,
-    #                0.0000000,  0.7660444, -0.6427876 ]
+    extrinsic_T: [ 0.367, 0.000, -0.094 ]  # aliengo_imu to livox_down, new chassie
+    extrinsic_R: [ 0.0000000,  0.6427876,  0.7660444,
+                   1.0000000,  0.0000000, -0.0000000,
+                   0.0000000,  0.7660444, -0.6427876 ]
 
 
 odometry: 

@@ -30,6 +30,8 @@ using namespace std;
 
 #define PUBFRAME_PERIOD (20)
 
+#define RELEASE_MODE 1
+
 const float MOV_THRESHOLD = 1.5f;
 
 string root_dir = ROOT_DIR;
@@ -39,11 +41,15 @@ int time_log_counter = 0;  //, publish_count = 0;
 bool init_map = false, flg_first_scan = true;
 
 // for location mode
+/// \brief 定位初始化标志位
 bool flg_location_inited_ = false;
 bool flg_get_init_guess_ = false;
+/// \brief 初始化姿态
 Eigen::Vector3d init_translation_ = Eigen::Vector3d::Zero();
 Eigen::Quaterniond init_rotation_ = Eigen::Quaterniond::Identity();
+
 std::mutex init_lock_;
+/// 地图点云
 PointCloudXYZI::Ptr map_cloud(new PointCloudXYZI());
 
 // Time Log Variables
@@ -65,6 +71,8 @@ V3D euler_cur;
 nav_msgs::Path path;
 nav_msgs::Odometry odomAftMapped;
 geometry_msgs::PoseStamped msg_body_pose;
+/// \brief 初始点云发布器
+ros::Publisher pub_initial_cloud;
 
 void SigHandle(int sig) {
   flg_exit = true;
@@ -171,9 +179,14 @@ void MapIncremental() {
   ivox_->AddPoints(points_to_add);
 }
 
+/// \brief 初始姿态回调函数
+/// \param pose_msg
 void initialpose_callback(
     const geometry_msgs::PoseWithCovarianceStampedConstPtr &pose_msg) {
-  if (flg_location_inited_) return;
+  ROS_INFO("Receive init pose");
+  if (flg_location_inited_) {
+    return;
+  }
 
   init_lock_.lock();
   init_translation_[0] = pose_msg->pose.pose.position.x;
@@ -185,7 +198,9 @@ void initialpose_callback(
   for (std::size_t i = 0; i < map_cloud->points.size(); i++) {
     p = map_cloud->points[i];
     float z_diff = std::fabs(p.z - initial_z_);
-    if (z_diff > 0.5) continue;
+    if (z_diff > 0.5) {
+      continue;
+    }
 
     delta_x = p.x - pose_msg->pose.pose.position.x;
     delta_y = p.y - pose_msg->pose.pose.position.y;
@@ -227,13 +242,18 @@ void initial_pose() {
     return;
   }
 
+  // source 点云降采样
+  PointCloudXYZI::Ptr source_cloud_ds(new PointCloudXYZI);
+  downSizeFilterSurf.setInputCloud(init_total_world);
+  downSizeFilterSurf.filter(*source_cloud_ds);
+
   // from coarse(ndt) to fine(icp)
   pcl::NormalDistributionsTransform<PointType, PointType> ndt;
   ndt.setTransformationEpsilon(1e-4);
   ndt.setEuclideanFitnessEpsilon(1e-4);
   ndt.setMaximumIterations(40);
-  ndt.setResolution(1.0);
-  ndt.setInputSource(init_total_world);
+  ndt.setResolution(0.5);
+  ndt.setInputSource(source_cloud_ds);
   ndt.setInputTarget(map_cloud);
 
   pcl::IterativeClosestPoint<PointType, PointType> icp;
@@ -242,7 +262,7 @@ void initial_pose() {
   icp.setTransformationEpsilon(1e-6);
   icp.setEuclideanFitnessEpsilon(1e-6);
   // icp.setRANSACIterations(0);
-  icp.setInputSource(init_total_world);
+  icp.setInputSource(source_cloud_ds);
   icp.setInputTarget(map_cloud);
 
   pcl::PointCloud<PointType>::Ptr unused_result(
@@ -255,8 +275,19 @@ void initial_pose() {
     return;
   }
 
+  // 发布初始化点云
+  Eigen::Matrix4f cloud_aligned_pose = icp.getFinalTransformation();
+  pcl::PointCloud<PointType>::Ptr cloud_aligned(
+      new pcl::PointCloud<PointType>());
+  pcl::transformPointCloud(*init_total_world, *cloud_aligned,
+                           cloud_aligned_pose);
+  sensor_msgs::PointCloud2 cloud_msg;
+  pcl::toROSMsg(*cloud_aligned, cloud_msg);
+  cloud_msg.header.frame_id = "camera_init";
+  pub_initial_cloud.publish(cloud_msg);
+
   double score = icp.getFitnessScore();
-  if (icp.hasConverged() == false || score == 0.0 || score > 0.2) {
+  if (icp.hasConverged() == false || score == 0.0 || score > 0.5) {
     ROS_ERROR("Global Initializing Fail with %f!", score);
     flg_location_inited_ = false;
     if (flg_get_init_guess_) {
@@ -528,13 +559,17 @@ int main(int argc, char **argv) {
   kf_output.change_P(P_init_output);
   Eigen::Matrix<double, 24, 24> Q_input = process_noise_cov_input();
   Eigen::Matrix<double, 30, 30> Q_output = process_noise_cov_output();
+
+#if !RELEASE_MODE
   /*** debug record ***/
   FILE *fp;
   string pos_log_dir = root_dir + "/Log/pos_log.txt";
   fp = fopen(pos_log_dir.c_str(), "w");
   open_file();
+#endif
 
   /*** ROS subscribe initialization ***/
+  /// 订阅激光数据
   ros::Subscriber sub_pcl;
   if (p_pre->lidar_type == MID360) {
     sub_pcl = nh.subscribe(lid_topic, 200000, livox2_pcl_cbk);
@@ -543,11 +578,14 @@ int main(int argc, char **argv) {
   } else {
     sub_pcl = nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
   }
+
+  /// 订阅IMU数据
   ros::Subscriber sub_imu = nh.subscribe(imu_topic, 200000, imu_cbk);
 
+  /// 订阅初始姿态
   ros::Subscriber sub_init_pose;
   if (flg_islocation_mode_) {
-    sub_init_pose = nh.subscribe("initialpose", 1, initialpose_callback);
+    sub_init_pose = nh.subscribe("/initialpose", 1, initialpose_callback);
   }
 
   ros::Publisher pubLaserCloudFullRes =
@@ -564,6 +602,10 @@ int main(int argc, char **argv) {
   ros::Publisher plane_pub =
       nh.advertise<visualization_msgs::Marker>("planner_normal", 1000);
 
+  pub_initial_cloud =
+      nh.advertise<sensor_msgs::PointCloud2>("cloud_initial", 10);
+
+  ///  读取地图点云并发布
   if (flg_islocation_mode_) {
     pcl::io::loadPCDFile(map_path_, *map_cloud);
     ROS_INFO("Load map cloud with size: %zu.", map_cloud->points.size());
@@ -571,7 +613,7 @@ int main(int argc, char **argv) {
     sensor_msgs::PointCloud2 laserCloudmsg;
     pcl::toROSMsg(*map_cloud, laserCloudmsg);
 
-    laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time);
+    // laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time);
     laserCloudmsg.header.frame_id = "camera_init";
     usleep(1000000);
     for (int i = 0; i < 5; i++) {
@@ -584,9 +626,14 @@ int main(int argc, char **argv) {
   ros::Rate loop_rate(500);
   bool status = ros::ok();
   while (status) {
-    if (flg_exit) break;
+    if (flg_exit) {
+      break;
+    }
+
     ros::spinOnce();
+    // 同步数据
     if (sync_packages(Measures)) {
+      // 定位模式下，初始化姿态
       if (flg_islocation_mode_ && !flg_location_inited_) {
         PointCloudXYZI::Ptr init_world(new PointCloudXYZI());
         init_world->resize(Measures.lidar->points.size());
@@ -606,6 +653,7 @@ int main(int argc, char **argv) {
         }
       }
 
+      // 重置定位
       if (flg_reset) {
         ROS_WARN("reset when rosbag play back");
         p_imu->Reset();
@@ -907,6 +955,7 @@ int main(int argc, char **argv) {
               /******* Publish odometry *******/
 
               publish_odometry(pubOdomAftMapped);
+#if !RELEASE_MODE
               if (runtime_pos_log) {
                 euler_cur = SO3ToEuler(kf_output.x_.rot);
                 fout_out << setw(20)
@@ -921,6 +970,7 @@ int main(int argc, char **argv) {
                          << kf_output.x_.ba.transpose() << " "
                          << feats_undistort->points.size() << endl;
               }
+#endif
             }
 
             for (int j = 0; j < time_seq[k]; j++) {
@@ -1102,6 +1152,7 @@ int main(int argc, char **argv) {
               /******* Publish odometry *******/
 
               publish_odometry(pubOdomAftMapped);
+#if !RELEASE_MODE
               if (runtime_pos_log) {
                 euler_cur = SO3ToEuler(kf_input.x_.rot);
                 fout_out << setw(20)
@@ -1114,6 +1165,7 @@ int main(int argc, char **argv) {
                          << kf_input.x_.gravity.transpose() << " "
                          << feats_undistort->points.size() << endl;
               }
+#endif
             }
 
             for (int j = 0; j < time_seq[k]; j++) {
@@ -1221,7 +1273,8 @@ int main(int argc, char **argv) {
       if (scan_pub_en && scan_body_pub_en)
         publish_frame_body(pubLaserCloudFullRes_body);
 
-      /*** Debug variables Logging ***/
+/*** Debug variables Logging ***/
+#if !RELEASE_MODE
       if (runtime_pos_log) {
         frame_num++;
         aver_time_consu = aver_time_consu * (frame_num - 1) / frame_num +
@@ -1272,6 +1325,7 @@ int main(int argc, char **argv) {
         }
         dump_lio_state_to_log(fp);
       }
+#endif
     }
     status = ros::ok();
     loop_rate.sleep();

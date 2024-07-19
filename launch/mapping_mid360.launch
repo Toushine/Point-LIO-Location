@@ -2,7 +2,7 @@
   <!-- Launch file for Livox Mid-360 LiDAR -->
 
     <node pkg="point_lio_loc" type="pointlio_location" name="laserMapping" output="screen">
-    <rosparam command="load" file="$(find point_lio_loc)/config/mid360.yaml" />
+    <rosparam command="load" file="$(find point_lio_loc)/config/mid360_go2.yaml" />
     <param name="use_imu_as_input" type="bool" value="1"/> <!--change to 1 to use IMU as input of Point-LIO-->
     <param name="prop_at_freq_of_imu" type="bool" value="1"/>
     <param name="check_satu" type="bool" value="1"/>
@@ -15,9 +15,9 @@
     <param name="runtime_pos_log_enable" type="bool" value="0" /> <!--1-->
 
     <!-- in location_mode can disable imu input -->
-    <param name="location_mode" type="bool" value="0" />
-    <param name="map_path" type="string" value="$(find point_lio_loc)/map/map_floors.pcd" />
-    <param name="initial_z" type="double" value="1.6" />
+    <param name="location_mode" type="bool" value="1" />
+    <param name="map_path" type="string" value="$(find point_lio_loc)/map/kunpeng-2F.pcd" />
+    <param name="initial_z" type="double" value="0.0" />
     <param name="mapping/imu_en" type="bool" value="1" />
     </node>
 

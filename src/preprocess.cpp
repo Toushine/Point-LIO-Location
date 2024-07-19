@@ -1,6 +1,7 @@
+#include "preprocess.h"
+
 #include "IMU_Processing.h"
 #include "livox_ros_driver2/CustomMsg.h"
-#include "preprocess.h"
 
 #define RETURN0 0x00
 #define RETURN0AND1 0x10
@@ -445,21 +446,22 @@ void Preprocess::avia_handler(
 
 void Preprocess::mid360_handler(
     const livox_ros_driver2::CustomMsg::ConstPtr &msg) {
-  pl_surf.clear();
-  pl_corn.clear();
-  pl_full.clear();
+  // pl_surf.clear();
+  // pl_corn.clear();
+  // pl_full.clear();
   // double t1 = omp_get_wtime();
   int plsize = msg->point_num;
 
-  pl_corn.reserve(plsize);
-  pl_surf.reserve(plsize);
+  // pl_corn.reserve(plsize);
+  pl_surf.resize(plsize);
   pl_full.resize(plsize);
 
-  for (int i = 0; i < N_SCANS; i++) {
-    pl_buff[i].clear();
-    pl_buff[i].reserve(plsize);
-  }
+  // for (int i = 0; i < N_SCANS; i++) {
+  //   pl_buff[i].clear();
+  //   pl_buff[i].reserve(plsize);
+  // }
   uint valid_num = 0;
+  uint valid_num2 = 0;
 
   for (uint i = 1; i < plsize; i++) {
     if ((msg->points[i].line < N_SCANS) &&
@@ -471,10 +473,7 @@ void Preprocess::mid360_handler(
         pl_full[i].y = msg->points[i].y;
         pl_full[i].z = msg->points[i].z;
         pl_full[i].intensity = msg->points[i].reflectivity;
-        pl_full[i].curvature =
-            msg->points[i].offset_time /
-            float(1000000);  // use curvature as time of each laser points,
-                             // curvature unit: ms
+        pl_full[i].curvature = msg->points[i].offset_time / float(1000000);
 
         if (((abs(pl_full[i].x - pl_full[i - 1].x) > 1e-7) ||
              (abs(pl_full[i].y - pl_full[i - 1].y) > 1e-7) ||
@@ -482,11 +481,14 @@ void Preprocess::mid360_handler(
             (pl_full[i].x * pl_full[i].x + pl_full[i].y * pl_full[i].y +
                  pl_full[i].z * pl_full[i].z >
              (blind * blind))) {
-          pl_surf.push_back(pl_full[i]);
+          pl_surf[valid_num2] = pl_full[i];
+          valid_num2++;
         }
       }
     }
   }
+
+  pl_surf.resize(valid_num2);
 }
 
 void Preprocess::oust64_handler(const sensor_msgs::PointCloud2::ConstPtr &msg) {

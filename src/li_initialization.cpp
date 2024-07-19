@@ -128,7 +128,7 @@ void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg) {
       timestamp_lidar.pop_front();
     }
   } else {
-    PointCloudXYZI::Ptr ptr(new PointCloudXYZI(10000, 1));
+    PointCloudXYZI::Ptr ptr(new PointCloudXYZI);
     p_pre->process(msg, ptr);
     if (con_frame) {
       if (frame_ct == 0) {
@@ -195,7 +195,7 @@ void livox2_pcl_cbk(const livox_ros_driver2::CustomMsg::ConstPtr &msg) {
       timestamp_lidar.pop_front();
     }
   } else {
-    PointCloudXYZI::Ptr ptr(new PointCloudXYZI(10000, 1));
+    PointCloudXYZI::Ptr ptr(new PointCloudXYZI);
     p_pre->process(msg, ptr);
     if (con_frame) {
       if (frame_ct == 0) {

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(point_lio)
+project(point_lio_loc)
 
 SET(CMAKE_BUILD_TYPE "Release")
 SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -82,12 +82,12 @@ catkin_package(
   DEPENDS EIGEN3 PCL
   INCLUDE_DIRS
 )
-add_executable(pointlio_mapping src/laserMapping.cpp
-                src/li_initialization.cpp src/parameters.cpp src/preprocess.cpp src/Estimator.cpp 
+add_executable(pointlio_location src/laserMapping.cpp
+                src/li_initialization.cpp src/parameters.cpp src/preprocess.cpp src/Estimator.cpp
                 src/IMU_Processing.cpp)
-target_link_libraries(pointlio_mapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES})
+target_link_libraries(pointlio_location ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES})
 
-target_include_directories(pointlio_mapping PRIVATE ${PYTHON_INCLUDE_DIRS})
+target_include_directories(pointlio_location PRIVATE ${PYTHON_INCLUDE_DIRS})
 
 
 

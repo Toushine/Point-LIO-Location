@@ -1,8 +1,8 @@
 common:
     lid_topic:  "/livox/lidar_up"
-    imu_topic:  "/livox/imu_up"
-    con_frame: false # true: if you need to combine several LiDAR frames into one
-    con_frame_num: 1 # the number of frames combined
+    imu_topic:  "/go2/imu"
+    con_frame: true # true: if you need to combine several LiDAR frames into one
+    con_frame_num: 10 # the number of frames combined
     cut_frame: false # true: if you need to cut one LiDAR frame into several subframes
     cut_frame_time_interval: 0.1 # should be integral fraction of 1 / LiDAR frequency
     time_diff_lidar_to_imu: 0.0 # Time offset between LiDAR and IMU calibrated by other algorithms, e.g., LI-Init (find in Readme)
@@ -15,14 +15,14 @@ preprocess:
 
 mapping:
     extrinsic_est_en: false # for aggressive motion, set this variable false
-    imu_time_inte: 0.005 # = 1 / frequency of IMU
+    imu_time_inte: 0.001 # = 1 / frequency of IMU
     lidar_time_inte: 0.1
-    satu_acc: 3.0 # the saturation value of IMU's acceleration. not related to the units
+    satu_acc: 32.0 # the saturation value of IMU's acceleration. not related to the units
     satu_gyro: 35 # the saturation value of IMU's angular velocity. not related to the units
-    acc_norm: 1.0 # 9.810 # 1.0 for g as unit, 9.81 for m/s^2 as unit of the IMU's acceleration
-    lidar_meas_cov: 0.01 # 0.001; 0.01
+    acc_norm: 9.810 # 9.810 # 1.0 for g as unit, 9.81 for m/s^2 as unit of the IMU's acceleration
+    lidar_meas_cov: 0.001 # 0.001; 0.01
     acc_cov_output: 500
-    gyr_cov_output: 1000
+    gyr_cov_output: 1000 
     b_acc_cov: 0.0001
     b_gyr_cov: 0.0001 
     imu_meas_acc_cov: 0.1 #0.1 # 0.1
@@ -32,18 +32,13 @@ mapping:
     plane_thr: 0.1 # 0.05, the threshold for plane criteria, the smaller, the flatter a plane
     match_s: 81
     ivox_grid_resolution: 0.2
-    gravity: [0.0, 0.0, -9.810] # [0.0, 9.810, 0.0] # # [0.0, 0.0, -9.787561] # gvins # 
+    gravity: [0.0, 0.0, -9.810] # [0.0, 9.810, 0.0] # # [0.0, 0.0, -9.787561] # gvins #
     gravity_init: [0.0, 0.0, -9.810] # preknown gravity for unstationary start
 
-    extrinsic_T: [ -0.011, -0.02329, 0.04412]   # aliengo_imu to livox_up, new chassie
-    extrinsic_R: [ 1, 0, 0,
-                   0, 1, 0,
-                   0, 0, 1 ]
-
-    # extrinsic_T: [ 0.381, 0.000, 0.016]   # aliengo_imu to livox_up, new chassie
-    # extrinsic_R: [ 0.0, -0.4694716,  0.8829476,
-    #                1, 0.0, 0.0,
-    #                0.0, 0.8829476,  0.4694716  ]
+    extrinsic_T: [ 0.381, 0.000, 0.016]   # aliengo_imu to livox_up, new chassie
+    extrinsic_R: [ 0.0, -0.4694716,  0.8829476,
+                   1, 0.0, 0.0,
+                   0.0, 0.8829476,  0.4694716  ]
 
     # extrinsic_T: [ 0.367, 0.000, -0.094 ]  # aliengo_imu to livox_down, new chassie
     # extrinsic_R: [ 0.0000000,  0.6427876,  0.7660444,

@@ -589,9 +589,9 @@ int main(int argc, char **argv) {
   }
 
   ros::Publisher pubLaserCloudFullRes =
-      nh.advertise<sensor_msgs::PointCloud2>("cloud_registered", 1000);
+      nh.advertise<sensor_msgs::PointCloud2>("cloud_registered", 10);
   ros::Publisher pubLaserCloudFullRes_body =
-      nh.advertise<sensor_msgs::PointCloud2>("cloud_registered_body", 1000);
+      nh.advertise<sensor_msgs::PointCloud2>("cloud_registered_body", 10);
   ros::Publisher pubLaserCloudEffect =
       nh.advertise<sensor_msgs::PointCloud2>("cloud_effected", 1000);
   ros::Publisher pubLaserCloudMap =
@@ -625,6 +625,8 @@ int main(int argc, char **argv) {
   signal(SIGINT, SigHandle);
   ros::Rate loop_rate(500);
   bool status = ros::ok();
+
+  int publish_cnt = 0;
   while (status) {
     if (flg_exit) {
       break;
@@ -1268,10 +1270,19 @@ int main(int argc, char **argv) {
 
       t5 = omp_get_wtime();
       /******* Publish points *******/
-      if (path_en) publish_path(pubPath);
-      if (scan_pub_en || pcd_save_en) publish_frame_world(pubLaserCloudFullRes);
-      if (scan_pub_en && scan_body_pub_en)
+      if (path_en) {
+        publish_path(pubPath);
+      }
+      if (scan_pub_en || pcd_save_en) {
+        if (publish_cnt % 100 == 0) {
+          publish_frame_world(pubLaserCloudFullRes);
+          publish_cnt = 0;
+        }
+        publish_cnt++;
+      }
+      if (scan_pub_en && scan_body_pub_en) {
         publish_frame_body(pubLaserCloudFullRes_body);
+      }
 
 /*** Debug variables Logging ***/
 #if !RELEASE_MODE

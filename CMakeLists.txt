@@ -56,6 +56,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 find_package(Eigen3 REQUIRED)
 find_package(PCL 1.8 REQUIRED)
+find_package(fmt REQUIRED)
 
 
 message(Eigen: ${EIGEN3_INCLUDE_DIR})
@@ -84,8 +85,8 @@ catkin_package(
 )
 add_executable(pointlio_location src/laserMapping.cpp
                 src/li_initialization.cpp src/parameters.cpp src/preprocess.cpp src/Estimator.cpp
-                src/IMU_Processing.cpp)
-target_link_libraries(pointlio_location ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES})
+                src/IMU_Processing.cpp src/loguru.cpp src/log.cpp)
+target_link_libraries(pointlio_location ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES} fmt::fmt)
 
 target_include_directories(pointlio_location PRIVATE ${PYTHON_INCLUDE_DIRS})
 
